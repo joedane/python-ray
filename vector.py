@@ -61,6 +61,9 @@ class Tuple:
 			self.x*other.y - self.y*other.x
 			)
 
+	def transform(self, m):
+		return m.mul_tuple(self)
+
 def clamp(c):
 	if c < 0:
 		return 0
@@ -127,6 +130,82 @@ class Canvas:
 			f.write("\n")
 		f.close()
 
+class Ray:
+
+	def __init__(self, o, d):
+		self.origin = o
+		self.direction = d
+
+	def __repr__(self):
+		return "Ray[origin: {}  direction: {}]".format(self.origin, self.direction)
+
+	def position(self, t):
+		return self.origin.add(self.direction.mul(t))
+
+	def transform(self, m):
+		return Ray(
+			self.origin.transform(m),
+			self.direction.transform(m)
+		)
+
+class Intersection:
+
+	def __init__(self, shape, t):
+		self.t = t
+		self.shape = shape
+
+	def __eq__(self, other):
+		if isinstance(other, Intersection):
+			return self.shape == other.shape and self.t == other.t
+		return false
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
+class Intersections:
+
+	def __init__(self):
+		self.intersections = []
+		self.nearest_positive = -1
+
+	def add(self, i):
+		self.intersections.append(i)
+		if i.t >= 0 and (self.nearest_positive < 0 or self.intersections[self.nearest_positive].t > i.t):
+			self.nearest_positive = len(self.intersections) - 1
+
+	def __len__(self):
+		return len(self.intersections)
+
+	def __getitem__(self, index):
+		return self.intersections[index]
+
+	def get_hit(self):
+		if self.nearest_positive < 0:
+			return None
+		return self.intersections[self.nearest_positive]
+
+class Sphere:
+
+	def __init__(self):
+		self.inverse_transform = xf_identity()
+
+	def set_transform(self, m):
+		self.inverse_transform = m.invert()
+
+	def intersect(self, ray):
+		ray = ray.transform(self.inverse_transform)
+		sphere_to_ray = ray.origin.sub(point(0, 0, 0))
+		a = ray.direction.dot(ray.direction)
+		b = 2 * ray.direction.dot(sphere_to_ray)
+		c = sphere_to_ray.dot(sphere_to_ray) - 1
+		discriminant = b*b - 4*a*c
+		if discriminant < 0:
+			return Intersections()
+		else:
+			ii = Intersections()
+			ii.add(Intersection(self, (-b - sqrt(discriminant)) / (2*a)))
+			ii.add(Intersection(self, (-b + sqrt(discriminant)) / (2*a)))
+			return ii
 
 def zero_array(size):
 	a = []
@@ -178,6 +257,20 @@ class Matrix:
 
 		return Matrix(p)
 
+	def mul_tuple(self, t):
+		if not isinstance(t, Tuple):
+			raise ValueError("")
+		if len(self.array) != 4:
+			raise ValueError("incompatible sizes")
+		a = self.array
+		return Tuple(
+			a[0][0]*t.x + a[0][1]*t.y + a[0][2]*t.z + a[0][3]*t.w,			
+			a[1][0]*t.x + a[1][1]*t.y + a[1][2]*t.z + a[1][3]*t.w,
+			a[2][0]*t.x + a[2][1]*t.y + a[2][2]*t.z + a[2][3]*t.w,
+			a[3][0]*t.x + a[3][1]*t.y + a[3][2]*t.z + a[3][3]*t.w,
+			)
+
+
 	def determinant(self):
 		a = self.array
 		if len(a) == 2:
@@ -203,7 +296,7 @@ class Matrix:
 
 	def cofactor(self, i, j):
 		m = self.minor(i, j)
-		if i+j % 2 == 1:
+		if (i+j) % 2 == 1:
 			m = -1*m
 		return m
 
@@ -220,6 +313,33 @@ class Matrix:
 				c = self.cofactor(row, col)
 				new_array[col][row] = c / det
 		return Matrix(new_array)
+
+def xf_identity():
+	return Matrix([
+		[1, 0, 0, 0],
+		[0, 1, 0, 0],
+		[0, 0, 1, 0],
+		[0, 0, 0, 1]
+		])
+
+def xf_translate(x, y, z):
+	return Matrix([
+		[1, 0, 0, x],
+		[0, 1, 0, y],
+		[0, 0, 1, z],
+		[0, 0, 0, 1]
+		])
+
+def xf_scale(x, y, z):
+	return Matrix([
+		[x, 0, 0, 0],
+		[0, y, 0, 0],
+		[0, 0, z, 0],
+		[0, 0, 0, 1]
+		])
+
+
+
 
 if __name__ == "__main__":
 	pass
